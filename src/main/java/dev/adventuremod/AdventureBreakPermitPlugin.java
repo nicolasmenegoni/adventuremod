@@ -1,18 +1,24 @@
 package dev.adventuremod;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
+import org.bukkit.block.Block;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public class AdventureBreakPermitPlugin extends JavaPlugin implements Listener {
+public final class AdventureBreakPermitPlugin extends JavaPlugin implements Listener {
 
-    private Set<Material> blockedMaterials;
+    private final Set<Material> blockedMaterials = new HashSet<>();
 
     @Override
     public void onEnable() {
@@ -28,29 +34,45 @@ public class AdventureBreakPermitPlugin extends JavaPlugin implements Listener {
     }
 
     private void reloadBlockedMaterials() {
+        blockedMaterials.clear();
+
         FileConfiguration config = getConfig();
-        blockedMaterials = config.getStringList("blocked-blocks").stream()
-                .map(String::trim)
-                .map(String::toUpperCase)
-                .map(name -> {
-                    Material material = Material.matchMaterial(name);
-                    if (material == null) {
-                        getLogger().warning("Material inválido na config.yml: " + name);
-                    }
-                    return material;
-                })
-                .filter(java.util.Objects::nonNull)
-                .collect(Collectors.toSet());
+        List<String> names = config.getStringList("blocked-blocks");
+
+        for (String raw : names) {
+            String key = raw.trim().toUpperCase(Locale.ROOT);
+            Material material = Material.matchMaterial(key);
+            if (material != null) {
+                blockedMaterials.add(material);
+            } else {
+                getLogger().warning("Invalid material in blocked-blocks: " + raw);
+            }
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onBlockBreak(BlockBreakEvent event) {
-        if (event.getPlayer().getGameMode() != GameMode.ADVENTURE) {
+    public void onLeftClickBlock(PlayerInteractEvent event) {
+        if (event.getAction() != Action.LEFT_CLICK_BLOCK) {
             return;
         }
 
-        if (blockedMaterials.contains(event.getBlock().getType())) {
-            event.setCancelled(true);
+        Player player = event.getPlayer();
+        if (player.getGameMode() != GameMode.ADVENTURE) {
+            return;
         }
+
+        Block block = event.getClickedBlock();
+        if (block == null) {
+            return;
+        }
+
+        if (blockedMaterials.contains(block.getType())) {
+            event.setCancelled(true);
+            return;
+        }
+
+        ItemStack tool = player.getInventory().getItemInMainHand();
+        block.breakNaturally(tool);
+        event.setCancelled(true);
     }
 }
