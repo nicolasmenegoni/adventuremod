@@ -1,7 +1,9 @@
 package dev.adventuremod;
 
+import java.util.HashSet;
+import java.util.List;
+import java.util.Locale;
 import java.util.Set;
-import java.util.stream.Collectors;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -11,9 +13,9 @@ import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
-public class AdventureBreakPermitPlugin extends JavaPlugin implements Listener {
+public final class AdventureBreakPermitPlugin extends JavaPlugin implements Listener {
 
-    private Set<Material> blockedMaterials;
+    private final Set<Material> blockedMaterials = new HashSet<>();
 
     @Override
     public void onEnable() {
@@ -29,19 +31,22 @@ public class AdventureBreakPermitPlugin extends JavaPlugin implements Listener {
     }
 
     private void reloadBlockedMaterials() {
+        blockedMaterials.clear();
+
         FileConfiguration config = getConfig();
-        blockedMaterials = config.getStringList("blocked-blocks").stream()
-                .map(String::trim)
-                .map(String::toUpperCase)
-                .map(name -> {
-                    Material material = Material.matchMaterial(name);
-                    if (material == null) {
-                        getLogger().warning("Material inválido na config.yml: " + name);
-                    }
-                    return material;
-                })
-                .filter(java.util.Objects::nonNull)
-                .collect(Collectors.toSet());
+        List<String> configured = config.getStringList("blocked-blocks");
+
+        for (String rawName : configured) {
+            String normalized = rawName.trim().toUpperCase(Locale.ROOT);
+            Material material = Material.matchMaterial(normalized);
+
+            if (material == null) {
+                getLogger().warning("Invalid material in config.yml: " + rawName);
+                continue;
+            }
+
+            blockedMaterials.add(material);
+        }
     }
 
     @EventHandler(priority = EventPriority.HIGHEST)
@@ -50,13 +55,13 @@ public class AdventureBreakPermitPlugin extends JavaPlugin implements Listener {
             return;
         }
 
-        if (blockedMaterials.contains(event.getBlock().getType())) {
+        Material blockType = event.getBlock().getType();
+        if (blockedMaterials.contains(blockType)) {
             event.setCancelled(true);
             return;
         }
 
-        // No modo Adventure, o evento normalmente já chega cancelado.
-        // Para materiais permitidos, removemos o cancelamento.
+        // Adventure mode normally blocks breaking. Allow it for non-blocked materials.
         event.setCancelled(false);
     }
 }
