@@ -4,7 +4,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.Arrays;
 import java.util.stream.Collectors;
+import java.lang.reflect.Method;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -25,6 +27,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
 
     private final Set<Material> blockedMaterials = new HashSet<>();
     private final Set<Material> allowedDestroyMaterials = new HashSet<>();
+    private boolean warnedCanDestroyUnsupported;
 
     @Override
     public void onEnable() {
@@ -56,7 +59,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
             }
         }
 
-        allowedDestroyMaterials.addAll(Material.values().stream()
+        allowedDestroyMaterials.addAll(Arrays.stream(Material.values())
             .filter(Material::isBlock)
             .filter(material -> !blockedMaterials.contains(material))
             .collect(Collectors.toSet()));
@@ -106,8 +109,25 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
             return;
         }
 
-        meta.setCanDestroy(allowedDestroyMaterials);
+        if (!applyCanDestroyMeta(meta)) {
+            return;
+        }
+
         item.setItemMeta(meta);
+    }
+
+    private boolean applyCanDestroyMeta(ItemMeta meta) {
+        try {
+            Method setCanDestroy = meta.getClass().getMethod("setCanDestroy", Set.class);
+            setCanDestroy.invoke(meta, allowedDestroyMaterials);
+            return true;
+        } catch (ReflectiveOperationException ignored) {
+            if (!warnedCanDestroyUnsupported) {
+                warnedCanDestroyUnsupported = true;
+                getLogger().warning("This server API does not support ItemMeta#setCanDestroy(Set<Material>). CanDestroy tags were not applied.");
+            }
+            return false;
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
