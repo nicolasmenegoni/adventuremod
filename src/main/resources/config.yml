@@ -1,0 +1,5 @@
+# Blocos que NÃO podem ser quebrados por jogadores em modo Adventure.
+# Use nomes de materiais do Bukkit/Spigot (ex: STONE, DIAMOND_BLOCK).
+blocked-blocks:
+  - DIRT
+  - GRASS_BLOCK
