@@ -10,10 +10,8 @@ import org.bukkit.block.Block;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
-import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
-import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -39,39 +37,22 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         blockedMaterials.clear();
 
         FileConfiguration config = getConfig();
-        List<String> configured = config.getStringList("blocked-blocks");
+        List<String> names = config.getStringList("blocked-blocks");
 
-        for (String rawName : configured) {
-            String normalized = rawName.trim().toUpperCase(Locale.ROOT);
-            Material material = Material.matchMaterial(normalized);
-
-            if (material == null) {
-                getLogger().warning("Invalid material in config.yml: " + rawName);
-                continue;
+        for (String raw : names) {
+            String key = raw.trim().toUpperCase(Locale.ROOT);
+            Material material = Material.matchMaterial(key);
+            if (material != null) {
+                blockedMaterials.add(material);
+            } else {
+                getLogger().warning("Invalid material in blocked-blocks: " + raw);
             }
-
-            blockedMaterials.add(material);
         }
     }
 
-    @EventHandler(priority = EventPriority.HIGHEST)
-    public void onBlockBreak(BlockBreakEvent event) {
-        if (event.getPlayer().getGameMode() != GameMode.ADVENTURE) {
-            return;
-        }
-
-        Material blockType = event.getBlock().getType();
-        if (blockedMaterials.contains(blockType)) {
-            event.setCancelled(true);
-            return;
-        }
-
-        event.setCancelled(false);
-    }
-
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
-    public void onAdventureLeftClick(PlayerInteractEvent event) {
-        if (event.getAction() != Action.LEFT_CLICK_BLOCK || event.getClickedBlock() == null) {
+    @EventHandler(ignoreCancelled = true)
+    public void onLeftClickBlock(PlayerInteractEvent event) {
+        if (event.getAction() != Action.LEFT_CLICK_BLOCK) {
             return;
         }
 
@@ -81,15 +62,16 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         }
 
         Block block = event.getClickedBlock();
+        if (block == null) {
+            return;
+        }
+
         if (blockedMaterials.contains(block.getType())) {
             event.setCancelled(true);
             return;
         }
 
         ItemStack tool = player.getInventory().getItemInMainHand();
-
-        // In Adventure mode, vanilla does not allow breaking by default.
-        // We manually break allowed blocks to enforce plugin rules.
         block.breakNaturally(tool);
         event.setCancelled(true);
     }
