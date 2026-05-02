@@ -1,0 +1,5 @@
+name: AdventureBreakPermit
+version: 1.0.0
+main: dev.adventuremod.AdventureBreakPermitPlugin
+api-version: '1.20'
+description: Permite quebrar blocos no modo aventura, exceto os listados na config.
