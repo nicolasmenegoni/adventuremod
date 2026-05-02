@@ -15,11 +15,11 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -27,7 +27,6 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
 
     private final Set<Material> blockedMaterials = new HashSet<>();
     private final Set<Material> allowedDestroyMaterials = new HashSet<>();
-    private boolean warnedCanDestroyUnsupported;
 
     @Override
     public void onEnable() {
@@ -66,7 +65,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
 
         for (Player onlinePlayer : getServer().getOnlinePlayers()) {
             if (onlinePlayer.getGameMode() == GameMode.ADVENTURE) {
-                applyCanDestroyForInventory(onlinePlayer);
+                applyCanDestroy(playerMainHand(onlinePlayer));
             }
         }
     }
@@ -75,7 +74,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
     public void onPlayerJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         if (player.getGameMode() == GameMode.ADVENTURE) {
-            applyCanDestroyForInventory(player);
+            applyCanDestroy(playerMainHand(player));
         }
     }
 
@@ -86,17 +85,17 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
             return;
         }
 
-        ItemStack nextItem = player.getInventory().getItem(event.getNewSlot());
-        applyCanDestroy(nextItem);
+        applyCanDestroy(player.getInventory().getItem(event.getNewSlot()));
     }
 
-    private void applyCanDestroyForInventory(Player player) {
-        PlayerInventory inventory = player.getInventory();
-        for (ItemStack item : inventory.getContents()) {
-            applyCanDestroy(item);
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockPlace(BlockPlaceEvent event) {
+        Player player = event.getPlayer();
+        if (player.getGameMode() != GameMode.ADVENTURE) {
+            return;
         }
-        applyCanDestroy(inventory.getItemInOffHand());
-        player.updateInventory();
+
+        applyCanDestroy(playerMainHand(player));
     }
 
     private void applyCanDestroy(ItemStack item) {
@@ -122,12 +121,12 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
             setCanDestroy.invoke(meta, allowedDestroyMaterials);
             return true;
         } catch (ReflectiveOperationException ignored) {
-            if (!warnedCanDestroyUnsupported) {
-                warnedCanDestroyUnsupported = true;
-                getLogger().warning("This server API does not support ItemMeta#setCanDestroy(Set<Material>). CanDestroy tags were not applied.");
-            }
             return false;
         }
+    }
+
+    private ItemStack playerMainHand(Player player) {
+        return player.getInventory().getItemInMainHand();
     }
 
     @EventHandler(ignoreCancelled = true)
