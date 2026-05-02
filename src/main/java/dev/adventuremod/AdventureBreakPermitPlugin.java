@@ -4,6 +4,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.block.Block;
@@ -12,12 +13,18 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class AdventureBreakPermitPlugin extends JavaPlugin implements Listener {
 
     private final Set<Material> blockedMaterials = new HashSet<>();
+    private final Set<Material> allowedDestroyMaterials = new HashSet<>();
 
     @Override
     public void onEnable() {
@@ -34,6 +41,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
 
     private void reloadBlockedMaterials() {
         blockedMaterials.clear();
+        allowedDestroyMaterials.clear();
 
         FileConfiguration config = getConfig();
         List<String> names = config.getStringList("blocked-blocks");
@@ -47,6 +55,59 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
                 getLogger().warning("Invalid material in blocked-blocks: " + raw);
             }
         }
+
+        allowedDestroyMaterials.addAll(Material.values().stream()
+            .filter(Material::isBlock)
+            .filter(material -> !blockedMaterials.contains(material))
+            .collect(Collectors.toSet()));
+
+        for (Player onlinePlayer : getServer().getOnlinePlayers()) {
+            if (onlinePlayer.getGameMode() == GameMode.ADVENTURE) {
+                applyCanDestroyForInventory(onlinePlayer);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        if (player.getGameMode() == GameMode.ADVENTURE) {
+            applyCanDestroyForInventory(player);
+        }
+    }
+
+    @EventHandler
+    public void onItemHeld(PlayerItemHeldEvent event) {
+        Player player = event.getPlayer();
+        if (player.getGameMode() != GameMode.ADVENTURE) {
+            return;
+        }
+
+        ItemStack nextItem = player.getInventory().getItem(event.getNewSlot());
+        applyCanDestroy(nextItem);
+    }
+
+    private void applyCanDestroyForInventory(Player player) {
+        PlayerInventory inventory = player.getInventory();
+        for (ItemStack item : inventory.getContents()) {
+            applyCanDestroy(item);
+        }
+        applyCanDestroy(inventory.getItemInOffHand());
+        player.updateInventory();
+    }
+
+    private void applyCanDestroy(ItemStack item) {
+        if (item == null || item.getType().isAir()) {
+            return;
+        }
+
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return;
+        }
+
+        meta.setCanDestroy(allowedDestroyMaterials);
+        item.setItemMeta(meta);
     }
 
     @EventHandler(ignoreCancelled = true)
