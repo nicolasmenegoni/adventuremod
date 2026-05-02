@@ -13,7 +13,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.inventory.ItemStack;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class AdventureBreakPermitPlugin extends JavaPlugin implements Listener {
@@ -71,8 +70,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
             return;
         }
 
-        ItemStack tool = player.getInventory().getItemInMainHand();
-        block.breakNaturally(tool);
-        event.setCancelled(true);
+        // For blocks that are not configured as blocked, let vanilla Minecraft
+        // handle the interaction/break behavior normally.
     }
 }
