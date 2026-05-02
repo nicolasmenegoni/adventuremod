@@ -16,6 +16,7 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -96,6 +97,19 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         }
 
         applyCanDestroy(playerMainHand(player));
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onEntityPickupItem(EntityPickupItemEvent event) {
+        if (!(event.getEntity() instanceof Player player)) {
+            return;
+        }
+
+        if (player.getGameMode() != GameMode.ADVENTURE) {
+            return;
+        }
+
+        applyCanDestroy(event.getItem().getItemStack());
     }
 
     private void applyCanDestroy(ItemStack item) {
