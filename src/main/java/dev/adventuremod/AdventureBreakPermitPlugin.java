@@ -5,9 +5,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.LinkedHashSet;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -184,11 +185,19 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
     }
 
     private void applyCanDestroy(ItemMeta meta, Set<Material> materials) {
-        meta.setDestroyableKeys(materials.stream().map(Material::getKey).collect(Collectors.toSet()));
+        Set<NamespacedKey> keys = new LinkedHashSet<>();
+        for (Material material : materials) {
+            keys.add(material.getKey());
+        }
+        meta.setDestroyableKeys(keys);
     }
 
     private void applyCanPlaceOn(ItemMeta meta, Set<Material> materials) {
-        meta.setPlaceableKeys(materials.stream().map(Material::getKey).collect(Collectors.toSet()));
+        Set<NamespacedKey> keys = new LinkedHashSet<>();
+        for (Material material : materials) {
+            keys.add(material.getKey());
+        }
+        meta.setPlaceableKeys(keys);
     }
 
 }
