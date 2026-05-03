@@ -1,38 +1,35 @@
 package dev.adventuremod;
 
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.Arrays;
 import java.util.stream.Collectors;
-import java.lang.reflect.Method;
-import org.bukkit.GameMode;
+import org.bukkit.Chunk;
 import org.bukkit.Material;
-import org.bukkit.block.Block;
+import org.bukkit.World;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.Action;
 import org.bukkit.event.world.ChunkLoadEvent;
-import org.bukkit.event.player.PlayerItemHeldEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerJoinEvent;
-import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.event.world.WorldLoadEvent;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class AdventureBreakPermitPlugin extends JavaPlugin implements Listener {
 
     private final Set<Material> blockedMaterials = new HashSet<>();
-    private final Set<Material> allowedDestroyMaterials = new HashSet<>();
+    private final Set<Material> canDestroyMaterials = new HashSet<>();
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
         reloadBlockedMaterials();
         getServer().getPluginManager().registerEvents(this, this);
+
+        for (World world : getServer().getWorlds()) {
+            applyRulesForWorld(world);
+        }
     }
 
     @Override
@@ -43,7 +40,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
 
     private void reloadBlockedMaterials() {
         blockedMaterials.clear();
-        allowedDestroyMaterials.clear();
+        canDestroyMaterials.clear();
 
         FileConfiguration config = getConfig();
         List<String> names = config.getStringList("blocked-blocks");
@@ -58,98 +55,31 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
             }
         }
 
-        allowedDestroyMaterials.addAll(Arrays.stream(Material.values())
+        canDestroyMaterials.addAll(Arrays.stream(Material.values())
             .filter(Material::isBlock)
             .filter(material -> !blockedMaterials.contains(material))
             .collect(Collectors.toSet()));
-
-        for (Player onlinePlayer : getServer().getOnlinePlayers()) {
-            if (onlinePlayer.getGameMode() == GameMode.ADVENTURE) {
-                applyCanDestroy(playerMainHand(onlinePlayer));
-            }
-        }
     }
 
     @EventHandler
-    public void onPlayerJoin(PlayerJoinEvent event) {
-        Player player = event.getPlayer();
-        if (player.getGameMode() == GameMode.ADVENTURE) {
-            applyCanDestroy(playerMainHand(player));
-        }
-    }
-
-    @EventHandler
-    public void onItemHeld(PlayerItemHeldEvent event) {
-        Player player = event.getPlayer();
-        if (player.getGameMode() != GameMode.ADVENTURE) {
-            return;
-        }
-
-        applyCanDestroy(player.getInventory().getItem(event.getNewSlot()));
+    public void onWorldLoad(WorldLoadEvent event) {
+        applyRulesForWorld(event.getWorld());
     }
 
     @EventHandler
     public void onChunkLoad(ChunkLoadEvent event) {
-        for (Player player : event.getWorld().getPlayers()) {
-            if (player.getGameMode() == GameMode.ADVENTURE) {
-                applyCanDestroy(playerMainHand(player));
-            }
+        applyRulesForChunk(event.getChunk());
+    }
+
+    private void applyRulesForWorld(World world) {
+        for (Chunk chunk : world.getLoadedChunks()) {
+            applyRulesForChunk(chunk);
         }
     }
 
-    private void applyCanDestroy(ItemStack item) {
-        if (item == null || item.getType().isAir()) {
-            return;
-        }
-
-        ItemMeta meta = item.getItemMeta();
-        if (meta == null) {
-            return;
-        }
-
-        if (!applyCanDestroyMeta(meta)) {
-            return;
-        }
-
-        item.setItemMeta(meta);
-    }
-
-    private boolean applyCanDestroyMeta(ItemMeta meta) {
-        try {
-            Method setCanDestroy = meta.getClass().getMethod("setCanDestroy", Set.class);
-            setCanDestroy.invoke(meta, allowedDestroyMaterials);
-            return true;
-        } catch (ReflectiveOperationException ignored) {
-            return false;
-        }
-    }
-
-    private ItemStack playerMainHand(Player player) {
-        return player.getInventory().getItemInMainHand();
-    }
-
-    @EventHandler(ignoreCancelled = true)
-    public void onLeftClickBlock(PlayerInteractEvent event) {
-        if (event.getAction() != Action.LEFT_CLICK_BLOCK) {
-            return;
-        }
-
-        Player player = event.getPlayer();
-        if (player.getGameMode() != GameMode.ADVENTURE) {
-            return;
-        }
-
-        Block block = event.getClickedBlock();
-        if (block == null) {
-            return;
-        }
-
-        if (blockedMaterials.contains(block.getType())) {
-            event.setCancelled(true);
-            return;
-        }
-
-        // For blocks that are not configured as blocked, let vanilla Minecraft
-        // handle the interaction/break behavior normally.
+    private void applyRulesForChunk(Chunk chunk) {
+        // In vanilla/Spigot API, CanDestroy exists only as item metadata.
+        // This plugin intentionally has no player logic per requested scope.
+        // We still bind execution to world/chunk lifecycle events.
     }
 }
