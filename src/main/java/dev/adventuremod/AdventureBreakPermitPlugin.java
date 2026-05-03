@@ -75,6 +75,8 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
                 }
             }
         }, 40L, 40L);
+
+        getServer().getScheduler().runTaskTimer(this, this::updateHologramVisibility, 2L, 2L);
     }
 
     @Override
@@ -210,7 +212,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         String key = buildDamageKey(player.getUniqueId(), block);
         BlockDamageState state = blockDamageStates.get(key);
         if (state == null || state.remaining <= 0) {
-            state = createDamageState(block);
+            state = createDamageState(player, block);
             blockDamageStates.put(key, state);
         }
 
@@ -225,20 +227,23 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         }
     }
 
-    private BlockDamageState createDamageState(Block block) {
-        ArmorStand hologram = block.getWorld().spawn(block.getLocation().add(0.5, 1.2, 0.5), ArmorStand.class, stand -> {
+    private BlockDamageState createDamageState(Player player, Block block) {
+        ArmorStand hologram = block.getWorld().spawn(block.getLocation().add(0.5, 0.5, 0.5), ArmorStand.class, stand -> {
             stand.setInvisible(true);
             stand.setGravity(false);
             stand.setMarker(true);
             stand.setCustomNameVisible(true);
         });
-        return new BlockDamageState(64, hologram.getUniqueId());
+        for (Player online : getServer().getOnlinePlayers()) {
+            online.hideEntity(this, hologram);
+        }
+        return new BlockDamageState(64, hologram.getUniqueId(), player.getUniqueId(), block.getLocation());
     }
 
     private void updateHologram(Block block, BlockDamageState state) {
         Entity entity = block.getWorld().getEntity(state.hologramId);
         if (entity instanceof ArmorStand stand) {
-            stand.setCustomName("§f" + state.remaining + "/64");
+            stand.setCustomName(colorForDamage(state.remaining) + state.remaining + "/64");
         }
     }
 
@@ -251,6 +256,37 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
 
     private String buildDamageKey(UUID playerId, Block block) {
         return playerId + ":" + block.getWorld().getName() + ":" + block.getX() + ":" + block.getY() + ":" + block.getZ();
+    }
+
+    private String colorForDamage(int remaining) {
+        if (remaining > 48) return "§a";
+        if (remaining > 32) return "§e";
+        if (remaining > 16) return "§6";
+        if (remaining > 8) return "§c";
+        return "§4";
+    }
+
+    private void updateHologramVisibility() {
+        for (Map.Entry<String, BlockDamageState> entry : blockDamageStates.entrySet()) {
+            BlockDamageState state = entry.getValue();
+            Player player = getServer().getPlayer(state.playerId);
+            if (player == null) {
+                continue;
+            }
+
+            Entity entity = state.blockLocation.getWorld().getEntity(state.hologramId);
+            if (entity == null) {
+                continue;
+            }
+
+            Block target = player.getTargetBlockExact(6);
+            boolean looking = target != null && target.getLocation().getBlock().equals(state.blockLocation.getBlock());
+            if (looking) {
+                player.showEntity(this, entity);
+            } else {
+                player.hideEntity(this, entity);
+            }
+        }
     }
 
     private boolean hasProperTool(ItemStack item, Material blockType) {
@@ -281,10 +317,14 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
     private static final class BlockDamageState {
         private int remaining;
         private final UUID hologramId;
+        private final UUID playerId;
+        private final org.bukkit.Location blockLocation;
 
-        private BlockDamageState(int remaining, UUID hologramId) {
+        private BlockDamageState(int remaining, UUID hologramId, UUID playerId, org.bukkit.Location blockLocation) {
             this.remaining = remaining;
             this.hologramId = hologramId;
+            this.playerId = playerId;
+            this.blockLocation = blockLocation;
         }
     }
 
