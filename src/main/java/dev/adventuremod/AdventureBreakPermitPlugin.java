@@ -10,11 +10,16 @@ import java.util.LinkedHashSet;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Sound;
+import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.Action;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
@@ -28,6 +33,11 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
 
     private final Set<Material> canPlaceOnBlocks = new HashSet<>();
     private final Set<Material> easyDroppedItems = new HashSet<>();
+    private final Set<Material> temporaryTorchBlocks = Set.of(
+        Material.TORCH,
+        Material.SOUL_TORCH,
+        Material.REDSTONE_TORCH
+    );
 
     private final Set<Material> shovelBlocks = EnumSet.of(
         Material.DIRT, Material.GRASS_BLOCK, Material.COARSE_DIRT, Material.PODZOL,
@@ -134,7 +144,46 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         }
 
         event.getClickedBlock().breakNaturally(player.getInventory().getItemInMainHand());
+        Sound breakSound = event.getClickedBlock().getBlockData().getSoundGroup().getBreakSound();
+        player.playSound(event.getClickedBlock().getLocation(), breakSound, 1.0f, 1.0f);
         event.setCancelled(true);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onChunkLoad(ChunkLoadEvent event) {
+        World world = event.getWorld();
+        int minY = world.getMinHeight();
+        int maxY = world.getMaxHeight();
+        int baseX = event.getChunk().getX() << 4;
+        int baseZ = event.getChunk().getZ() << 4;
+
+        for (int x = 0; x < 16; x++) {
+            for (int z = 0; z < 16; z++) {
+                for (int y = minY; y < maxY; y++) {
+                    Block block = world.getBlockAt(baseX + x, y, baseZ + z);
+                    if (block.getType() == Material.LAVA) {
+                        block.setType(Material.AIR, false);
+                    }
+                }
+            }
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onBlockPlace(BlockPlaceEvent event) {
+        Block placed = event.getBlockPlaced();
+        if (!temporaryTorchBlocks.contains(placed.getType())) {
+            return;
+        }
+
+        getServer().getScheduler().runTaskLater(this, () -> {
+            if (placed.getType() == Material.TORCH
+                || placed.getType() == Material.SOUL_TORCH
+                || placed.getType() == Material.REDSTONE_TORCH) {
+                placed.setType(Material.AIR, false);
+                placed.getWorld().dropItemNaturally(placed.getLocation(), new ItemStack(Material.STICK, 1));
+            }
+        }, 20L * 30L);
     }
 
     private void applyRulesToItem(ItemStack item) {
