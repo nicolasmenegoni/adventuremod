@@ -185,9 +185,10 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
             return;
         }
 
-        event.getClickedBlock().breakNaturally(player.getInventory().getItemInMainHand());
-        Sound breakSound = event.getClickedBlock().getBlockData().getSoundGroup().getBreakSound();
-        player.playSound(event.getClickedBlock().getLocation(), breakSound, 1.0f, 1.0f);
+        Block block = event.getClickedBlock();
+        Sound breakSound = block.getBlockData().getSoundGroup().getBreakSound();
+        block.breakNaturally(player.getInventory().getItemInMainHand());
+        player.playSound(block.getLocation(), breakSound, 1.0f, 1.0f);
         event.setCancelled(true);
     }
 
