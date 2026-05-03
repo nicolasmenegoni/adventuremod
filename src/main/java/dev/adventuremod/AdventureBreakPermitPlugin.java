@@ -100,7 +100,12 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
 
     @EventHandler(ignoreCancelled = true)
     public void onInventoryClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player player) || player.getGameMode() != GameMode.ADVENTURE) {
+        if (!(event.getWhoClicked() instanceof Player)) {
+            return;
+        }
+
+        Player player = (Player) event.getWhoClicked();
+        if (player.getGameMode() != GameMode.ADVENTURE) {
             return;
         }
 
@@ -109,7 +114,12 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
 
     @EventHandler(ignoreCancelled = true)
     public void onPickup(EntityPickupItemEvent event) {
-        if (!(event.getEntity() instanceof Player player) || player.getGameMode() != GameMode.ADVENTURE) {
+        if (!(event.getEntity() instanceof Player)) {
+            return;
+        }
+
+        Player player = (Player) event.getEntity();
+        if (player.getGameMode() != GameMode.ADVENTURE) {
             return;
         }
 
