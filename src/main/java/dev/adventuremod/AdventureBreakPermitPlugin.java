@@ -2,6 +2,7 @@ package dev.adventuremod;
 
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -189,7 +190,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         for (Material material : materials) {
             keys.add(material.getKey());
         }
-        meta.setDestroyableKeys(keys);
+        meta.setDestroyableKeys((Collection) keys);
     }
 
     private void applyCanPlaceOn(ItemMeta meta, Set<Material> materials) {
@@ -197,7 +198,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         for (Material material : materials) {
             keys.add(material.getKey());
         }
-        meta.setPlaceableKeys(keys);
+        meta.setPlaceableKeys((Collection) keys);
     }
 
 }
