@@ -21,6 +21,8 @@ import org.bukkit.event.block.Action;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
@@ -101,6 +103,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         if (player.getGameMode() == GameMode.ADVENTURE) {
             applyRulesToItem(player.getInventory().getItemInMainHand());
         }
+        getServer().getScheduler().runTaskLater(this, () -> unstackPlayerInventory(player), 1L);
     }
 
     @EventHandler
@@ -125,6 +128,21 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
 
         // Apply only when item is picked; avoid scanning entire inventory.
         applyRulesToItem(event.getItem().getItemStack());
+        getServer().getScheduler().runTaskLater(this, () -> unstackPlayerInventory(player), 1L);
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (event.getWhoClicked() instanceof Player player) {
+            getServer().getScheduler().runTaskLater(this, () -> unstackPlayerInventory(player), 1L);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onInventoryDrag(InventoryDragEvent event) {
+        if (event.getWhoClicked() instanceof Player player) {
+            getServer().getScheduler().runTaskLater(this, () -> unstackPlayerInventory(player), 1L);
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -263,6 +281,31 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
             keys.add(material.getKey());
         }
         meta.setPlaceableKeys((Collection) keys);
+    }
+
+    private void unstackPlayerInventory(Player player) {
+        ItemStack[] contents = player.getInventory().getContents();
+        for (int slot = 0; slot < contents.length; slot++) {
+            ItemStack stack = contents[slot];
+            if (stack == null || stack.getType().isAir() || stack.getAmount() <= 1) {
+                continue;
+            }
+
+            int amount = stack.getAmount();
+            stack.setAmount(1);
+            int remaining = amount - 1;
+
+            while (remaining > 0) {
+                ItemStack single = stack.clone();
+                single.setAmount(1);
+                var leftovers = player.getInventory().addItem(single);
+                if (!leftovers.isEmpty()) {
+                    player.getWorld().dropItemNaturally(player.getLocation(), single);
+                }
+                remaining--;
+            }
+        }
+        player.updateInventory();
     }
 
 }
