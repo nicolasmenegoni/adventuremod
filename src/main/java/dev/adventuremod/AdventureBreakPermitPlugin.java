@@ -1,85 +1,192 @@
 package dev.adventuremod;
 
-import java.util.Arrays;
+import java.lang.reflect.Method;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
-import java.util.stream.Collectors;
-import org.bukkit.Chunk;
+import org.bukkit.GameMode;
 import org.bukkit.Material;
-import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.world.ChunkLoadEvent;
-import org.bukkit.event.world.WorldLoadEvent;
+import org.bukkit.event.block.Action;
+import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.player.PlayerItemHeldEvent;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class AdventureBreakPermitPlugin extends JavaPlugin implements Listener {
 
-    private final Set<Material> blockedMaterials = new HashSet<>();
-    private final Set<Material> canDestroyMaterials = new HashSet<>();
+    private final Set<Material> easyDroppedBlocks = new HashSet<>();
+    private final Set<Material> canPlaceOnBlocks = new HashSet<>();
+
+    private final Set<Material> shovelBlocks = EnumSet.of(
+        Material.DIRT, Material.GRASS_BLOCK, Material.COARSE_DIRT, Material.PODZOL,
+        Material.ROOTED_DIRT, Material.MUD, Material.SAND, Material.RED_SAND,
+        Material.GRAVEL, Material.CLAY, Material.SNOW, Material.SNOW_BLOCK,
+        Material.SOUL_SAND, Material.SOUL_SOIL, Material.MYCELIUM
+    );
+
+    private final Set<Material> woodPickaxeBlocks = EnumSet.of(
+        Material.STONE, Material.COBBLESTONE, Material.COAL_ORE, Material.DEEPSLATE_COAL_ORE
+    );
+
+    private final Set<Material> stonePickaxeBlocks = EnumSet.of(
+        Material.STONE, Material.COBBLESTONE, Material.COAL_ORE,
+        Material.DEEPSLATE_COAL_ORE, Material.IRON_ORE, Material.DEEPSLATE_IRON_ORE
+    );
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        reloadBlockedMaterials();
+        reloadPluginConfig();
         getServer().getPluginManager().registerEvents(this, this);
-
-        for (World world : getServer().getWorlds()) {
-            applyRulesForWorld(world);
-        }
     }
 
     @Override
     public void reloadConfig() {
         super.reloadConfig();
-        reloadBlockedMaterials();
+        reloadPluginConfig();
     }
 
-    private void reloadBlockedMaterials() {
-        blockedMaterials.clear();
-        canDestroyMaterials.clear();
+    private void reloadPluginConfig() {
+        easyDroppedBlocks.clear();
+        canPlaceOnBlocks.clear();
 
         FileConfiguration config = getConfig();
-        List<String> names = config.getStringList("blocked-blocks");
+        loadMaterialList(config.getStringList("easy-dropped-itens"), easyDroppedBlocks, "easy-dropped-itens");
+        loadMaterialList(config.getStringList("canplaceon-itens"), canPlaceOnBlocks, "canplaceon-itens");
 
+        for (Player player : getServer().getOnlinePlayers()) {
+            if (player.getGameMode() == GameMode.ADVENTURE) {
+                applyRulesToItem(player.getInventory().getItemInMainHand());
+            }
+        }
+    }
+
+    private void loadMaterialList(List<String> names, Set<Material> target, String path) {
         for (String raw : names) {
             String key = raw.trim().toUpperCase(Locale.ROOT);
             Material material = Material.matchMaterial(key);
-            if (material != null) {
-                blockedMaterials.add(material);
-            } else {
-                getLogger().warning("Invalid material in blocked-blocks: " + raw);
+            if (material == null) {
+                getLogger().warning("Material inválido em " + path + ": " + raw);
+                continue;
+            }
+            target.add(material);
+        }
+    }
+
+    @EventHandler
+    public void onJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        if (player.getGameMode() == GameMode.ADVENTURE) {
+            applyRulesToItem(player.getInventory().getItemInMainHand());
+        }
+    }
+
+    @EventHandler
+    public void onHeldItem(PlayerItemHeldEvent event) {
+        Player player = event.getPlayer();
+        if (player.getGameMode() != GameMode.ADVENTURE) {
+            return;
+        }
+        applyRulesToItem(player.getInventory().getItem(event.getNewSlot()));
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onLeftClick(PlayerInteractEvent event) {
+        if (event.getAction() != Action.LEFT_CLICK_BLOCK) {
+            return;
+        }
+
+        Player player = event.getPlayer();
+        if (player.getGameMode() != GameMode.ADVENTURE) {
+            return;
+        }
+
+        Block block = event.getClickedBlock();
+        if (block == null) {
+            return;
+        }
+
+        if (easyDroppedBlocks.contains(block.getType())) {
+            block.breakNaturally(player.getInventory().getItemInMainHand());
+            event.setCancelled(true);
+        }
+    }
+
+    private void applyRulesToItem(ItemStack item) {
+        if (item == null || item.getType().isAir()) {
+            return;
+        }
+
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) {
+            return;
+        }
+
+        Material type = item.getType();
+        String name = type.name();
+
+        if (type.isBlock()) {
+            invokeSet(meta, "setCanPlaceOn", canPlaceOnBlocks);
+        }
+
+        if (name.endsWith("_SHOVEL")) {
+            invokeSet(meta, "setCanDestroy", shovelBlocks);
+        } else if (name.equals("WOODEN_PICKAXE")) {
+            invokeSet(meta, "setCanDestroy", woodPickaxeBlocks);
+        } else if (name.equals("STONE_PICKAXE")) {
+            invokeSet(meta, "setCanDestroy", stonePickaxeBlocks);
+        } else if (name.endsWith("_PICKAXE")) {
+            invokeSet(meta, "setCanDestroy", buildGenericPickaxeBlocks());
+        } else if (name.endsWith("_AXE")) {
+            invokeSet(meta, "setCanDestroy", buildAxeBlocks());
+        }
+
+        item.setItemMeta(meta);
+    }
+
+    private Set<Material> buildGenericPickaxeBlocks() {
+        Set<Material> blocks = new HashSet<>(stonePickaxeBlocks);
+        for (Material material : Material.values()) {
+            if (!material.isBlock()) {
+                continue;
+            }
+            String n = material.name();
+            if (n.endsWith("_ORE") || n.contains("DEEPSLATE") || n.contains("STONE") || n.contains("NETHERRACK")) {
+                blocks.add(material);
             }
         }
-
-        canDestroyMaterials.addAll(Arrays.stream(Material.values())
-            .filter(Material::isBlock)
-            .filter(material -> !blockedMaterials.contains(material))
-            .collect(Collectors.toSet()));
+        return blocks;
     }
 
-    @EventHandler
-    public void onWorldLoad(WorldLoadEvent event) {
-        applyRulesForWorld(event.getWorld());
-    }
-
-    @EventHandler
-    public void onChunkLoad(ChunkLoadEvent event) {
-        applyRulesForChunk(event.getChunk());
-    }
-
-    private void applyRulesForWorld(World world) {
-        for (Chunk chunk : world.getLoadedChunks()) {
-            applyRulesForChunk(chunk);
+    private Set<Material> buildAxeBlocks() {
+        Set<Material> blocks = new HashSet<>();
+        for (Material material : Material.values()) {
+            if (!material.isBlock()) {
+                continue;
+            }
+            String n = material.name();
+            if (n.contains("LOG") || n.contains("WOOD") || n.contains("STEM") || n.contains("HYPHAE") || n.contains("PLANKS")) {
+                blocks.add(material);
+            }
         }
+        return blocks;
     }
 
-    private void applyRulesForChunk(Chunk chunk) {
-        // In vanilla/Spigot API, CanDestroy exists only as item metadata.
-        // This plugin intentionally has no player logic per requested scope.
-        // We still bind execution to world/chunk lifecycle events.
+    private void invokeSet(ItemMeta meta, String methodName, Set<Material> materials) {
+        try {
+            Method method = meta.getClass().getMethod(methodName, Set.class);
+            method.invoke(meta, materials);
+        } catch (ReflectiveOperationException ignored) {
+            // API sem suporte ao método.
+        }
     }
 }

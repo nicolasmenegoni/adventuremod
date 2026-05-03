@@ -1,5 +1,13 @@
-# Blocos que NÃO podem ser quebrados por jogadores em modo Adventure.
-# Use nomes de materiais do Bukkit/Spigot (ex: STONE, DIAMOND_BLOCK).
-blocked-blocks:
-  - DIRT
+# Blocos que quebram com 1 hit e já dropam em modo Adventure.
+easy-dropped-itens:
+  - TALL_GRASS
+  - SHORT_GRASS
+  - FERN
+  - LARGE_FERN
+  - DANDELION
+  - POPPY
+
+# Blocos onde blocos colocáveis podem ser colocados (CanPlaceOn).
+canplaceon-itens:
   - GRASS_BLOCK
+  - SAND
