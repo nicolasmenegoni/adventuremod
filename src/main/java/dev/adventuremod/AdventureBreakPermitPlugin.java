@@ -15,10 +15,8 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityPickupItemEvent;
 import org.bukkit.event.inventory.InventoryClickEvent;
-import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
@@ -117,28 +115,6 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         }
 
         applyRulesToItem(event.getItem().getItemStack());
-    }
-
-    @EventHandler(ignoreCancelled = true)
-    public void onLeftClick(PlayerInteractEvent event) {
-        if (event.getAction() != Action.LEFT_CLICK_BLOCK) {
-            return;
-        }
-
-        Player player = event.getPlayer();
-        if (player.getGameMode() != GameMode.ADVENTURE) {
-            return;
-        }
-
-        if (event.getClickedBlock() == null) {
-            return;
-        }
-
-        ItemStack hand = player.getInventory().getItemInMainHand();
-        if (isAllowedToolBreak(hand, event.getClickedBlock().getType())) {
-            event.getClickedBlock().breakNaturally(hand);
-            event.setCancelled(true);
-        }
     }
 
     private void applyRulesToInventory(Player player) {
@@ -244,28 +220,4 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         }
     }
 
-    private boolean isAllowedToolBreak(ItemStack item, Material block) {
-        if (item == null || item.getType().isAir()) {
-            return false;
-        }
-
-        String tool = item.getType().name();
-        if (tool.endsWith("_AXE")) {
-            return buildAxeBlocks().contains(block);
-        }
-        if (tool.endsWith("_SHOVEL")) {
-            return shovelBlocks.contains(block);
-        }
-        if (tool.equals("WOODEN_PICKAXE")) {
-            return woodPickaxeBlocks.contains(block);
-        }
-        if (tool.equals("STONE_PICKAXE")) {
-            return stonePickaxeBlocks.contains(block);
-        }
-        if (tool.endsWith("_PICKAXE")) {
-            return buildGenericPickaxeBlocks().contains(block);
-        }
-
-        return false;
-    }
 }
