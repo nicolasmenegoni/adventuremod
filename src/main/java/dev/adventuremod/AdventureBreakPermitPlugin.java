@@ -126,8 +126,24 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
             return;
         }
 
+        ItemStack picked = event.getItem().getItemStack();
+        if (picked.getAmount() > 1) {
+            event.setCancelled(true);
+            int amount = picked.getAmount();
+            ItemStack base = picked.clone();
+            base.setAmount(1);
+            for (int i = 0; i < amount; i++) {
+                ItemStack single = base.clone();
+                applyRulesToItem(single);
+                player.getInventory().addItem(single);
+            }
+            event.getItem().remove();
+            player.updateInventory();
+            return;
+        }
+
         // Apply only when item is picked; avoid scanning entire inventory.
-        applyRulesToItem(event.getItem().getItemStack());
+        applyRulesToItem(picked);
         getServer().getScheduler().runTaskLater(this, () -> unstackPlayerInventory(player), 1L);
     }
 
@@ -236,6 +252,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         }
 
         meta.addItemFlags(ItemFlag.HIDE_DESTROYS, ItemFlag.HIDE_PLACED_ON);
+        meta.setMaxStackSize(1);
         item.setItemMeta(meta);
     }
 
