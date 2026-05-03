@@ -14,18 +14,20 @@ import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.Action;
 import org.bukkit.event.entity.EntityPickupItemEvent;
-import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.PlayerInventory;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class AdventureBreakPermitPlugin extends JavaPlugin implements Listener {
 
     private final Set<Material> canPlaceOnBlocks = new HashSet<>();
+    private final Set<Material> easyDroppedItems = new HashSet<>();
 
     private final Set<Material> shovelBlocks = EnumSet.of(
         Material.DIRT, Material.GRASS_BLOCK, Material.COARSE_DIRT, Material.PODZOL,
@@ -58,13 +60,15 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
 
     private void reloadPluginConfig() {
         canPlaceOnBlocks.clear();
+        easyDroppedItems.clear();
 
         FileConfiguration config = getConfig();
         loadMaterialList(config.getStringList("canplaceon-itens"), canPlaceOnBlocks, "canplaceon-itens");
+        loadMaterialList(config.getStringList("easy-dropped-itens"), easyDroppedItems, "easy-dropped-itens");
 
         for (Player player : getServer().getOnlinePlayers()) {
             if (player.getGameMode() == GameMode.ADVENTURE) {
-                applyRulesToInventory(player);
+                applyRulesToItem(player.getInventory().getItemInMainHand());
             }
         }
     }
@@ -85,7 +89,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         if (player.getGameMode() == GameMode.ADVENTURE) {
-            applyRulesToInventory(player);
+            applyRulesToItem(player.getInventory().getItemInMainHand());
         }
     }
 
@@ -99,20 +103,6 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onInventoryClick(InventoryClickEvent event) {
-        if (!(event.getWhoClicked() instanceof Player)) {
-            return;
-        }
-
-        Player player = (Player) event.getWhoClicked();
-        if (player.getGameMode() != GameMode.ADVENTURE) {
-            return;
-        }
-
-        applyRulesToInventory(player);
-    }
-
-    @EventHandler(ignoreCancelled = true)
     public void onPickup(EntityPickupItemEvent event) {
         if (!(event.getEntity() instanceof Player)) {
             return;
@@ -123,16 +113,28 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
             return;
         }
 
+        // Apply only when item is picked; avoid scanning entire inventory.
         applyRulesToItem(event.getItem().getItemStack());
     }
 
-    private void applyRulesToInventory(Player player) {
-        PlayerInventory inventory = player.getInventory();
-        for (ItemStack content : inventory.getContents()) {
-            applyRulesToItem(content);
+    @EventHandler(ignoreCancelled = true)
+    public void onEasyDropBreak(PlayerInteractEvent event) {
+        if (event.getAction() != Action.LEFT_CLICK_BLOCK) {
+            return;
         }
-        applyRulesToItem(inventory.getItemInOffHand());
-        player.updateInventory();
+
+        Player player = event.getPlayer();
+        if (player.getGameMode() != GameMode.ADVENTURE || event.getClickedBlock() == null) {
+            return;
+        }
+
+        Material type = event.getClickedBlock().getType();
+        if (!easyDroppedItems.contains(type)) {
+            return;
+        }
+
+        event.getClickedBlock().breakNaturally(player.getInventory().getItemInMainHand());
+        event.setCancelled(true);
     }
 
     private void applyRulesToItem(ItemStack item) {
@@ -149,7 +151,9 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         String name = type.name();
 
         if (type.isBlock()) {
-            applyCanPlaceOn(meta, canPlaceOnBlocks);
+            Set<Material> placeOn = new HashSet<>(canPlaceOnBlocks);
+            placeOn.add(type);
+            applyCanPlaceOn(meta, placeOn);
         }
 
         if (name.endsWith("_SHOVEL")) {
@@ -164,6 +168,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
             applyCanDestroy(meta, buildAxeBlocks());
         }
 
+        meta.addItemFlags(ItemFlag.HIDE_DESTROYS, ItemFlag.HIDE_PLACED_ON);
         item.setItemMeta(meta);
     }
 

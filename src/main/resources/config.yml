@@ -6,6 +6,13 @@ easy-dropped-itens:
   - LARGE_FERN
   - DANDELION
   - POPPY
+  - BLUE_ORCHID
+  - OXEYE_DAISY
+  - SUGAR_CANE
+  - BAMBOO
+  - KELP_PLANT
+  - KELP
+  - SWEET_BERRY_BUSH
 
 # Blocos onde blocos colocáveis podem ser colocados (CanPlaceOn).
 canplaceon-itens:
