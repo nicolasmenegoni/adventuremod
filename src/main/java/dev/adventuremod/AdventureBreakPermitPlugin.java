@@ -3,16 +3,21 @@ package dev.adventuremod;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.LinkedHashSet;
+import java.util.UUID;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.entity.ArmorStand;
+import org.bukkit.entity.Entity;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -35,6 +40,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
 
     private final Set<Material> canPlaceOnBlocks = new HashSet<>();
     private final Set<Material> easyDroppedItems = new HashSet<>();
+    private final Map<String, BlockDamageState> blockDamageStates = new HashMap<>();
     private final Set<Material> temporaryTorchBlocks = Set.of(
         Material.TORCH,
         Material.SOUL_TORCH,
@@ -181,6 +187,14 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         }
 
         Material type = event.getClickedBlock().getType();
+
+        ItemStack hand = player.getInventory().getItemInMainHand();
+        if (!hasProperTool(hand, type)) {
+            handleCustomBlockDamage(player, event.getClickedBlock());
+            event.setCancelled(true);
+            return;
+        }
+
         if (!easyDroppedItems.contains(type)) {
             return;
         }
@@ -190,6 +204,88 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         block.breakNaturally(player.getInventory().getItemInMainHand());
         player.playSound(block.getLocation(), breakSound, 1.0f, 1.0f);
         event.setCancelled(true);
+    }
+
+    private void handleCustomBlockDamage(Player player, Block block) {
+        String key = buildDamageKey(player.getUniqueId(), block);
+        BlockDamageState state = blockDamageStates.get(key);
+        if (state == null || state.remaining <= 0) {
+            state = createDamageState(block);
+            blockDamageStates.put(key, state);
+        }
+
+        state.remaining--;
+        updateHologram(block, state);
+        player.playSound(block.getLocation(), block.getBlockData().getSoundGroup().getHitSound(), 1.0f, 1.0f);
+
+        if (state.remaining <= 0) {
+            removeHologram(block.getWorld(), state);
+            blockDamageStates.remove(key);
+            block.breakNaturally(player.getInventory().getItemInMainHand());
+        }
+    }
+
+    private BlockDamageState createDamageState(Block block) {
+        ArmorStand hologram = block.getWorld().spawn(block.getLocation().add(0.5, 1.2, 0.5), ArmorStand.class, stand -> {
+            stand.setInvisible(true);
+            stand.setGravity(false);
+            stand.setMarker(true);
+            stand.setCustomNameVisible(true);
+        });
+        return new BlockDamageState(64, hologram.getUniqueId());
+    }
+
+    private void updateHologram(Block block, BlockDamageState state) {
+        Entity entity = block.getWorld().getEntity(state.hologramId);
+        if (entity instanceof ArmorStand stand) {
+            stand.setCustomName("§f" + state.remaining + "/64");
+        }
+    }
+
+    private void removeHologram(World world, BlockDamageState state) {
+        Entity entity = world.getEntity(state.hologramId);
+        if (entity != null) {
+            entity.remove();
+        }
+    }
+
+    private String buildDamageKey(UUID playerId, Block block) {
+        return playerId + ":" + block.getWorld().getName() + ":" + block.getX() + ":" + block.getY() + ":" + block.getZ();
+    }
+
+    private boolean hasProperTool(ItemStack item, Material blockType) {
+        if (item == null || item.getType().isAir()) {
+            return false;
+        }
+
+        String name = item.getType().name();
+        if (name.endsWith("_SHOVEL")) {
+            return shovelBlocks.contains(blockType);
+        }
+        if (name.equals("WOODEN_PICKAXE")) {
+            return woodPickaxeBlocks.contains(blockType);
+        }
+        if (name.equals("STONE_PICKAXE")) {
+            return stonePickaxeBlocks.contains(blockType);
+        }
+        if (name.endsWith("_PICKAXE")) {
+            return buildGenericPickaxeBlocks().contains(blockType);
+        }
+        if (name.endsWith("_AXE")) {
+            return buildAxeBlocks().contains(blockType);
+        }
+
+        return false;
+    }
+
+    private static final class BlockDamageState {
+        private int remaining;
+        private final UUID hologramId;
+
+        private BlockDamageState(int remaining, UUID hologramId) {
+            this.remaining = remaining;
+            this.hologramId = hologramId;
+        }
     }
 
     @EventHandler(ignoreCancelled = true)
