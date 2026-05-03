@@ -3,21 +3,16 @@ package dev.adventuremod;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Set;
 import java.util.LinkedHashSet;
-import java.util.UUID;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.Sound;
 import org.bukkit.World;
 import org.bukkit.block.Block;
-import org.bukkit.entity.ArmorStand;
-import org.bukkit.entity.Entity;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -33,6 +28,7 @@ import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.ItemFlag;
+import org.bukkit.inventory.ShapedRecipe;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -40,7 +36,6 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
 
     private final Set<Material> canPlaceOnBlocks = new HashSet<>();
     private final Set<Material> easyDroppedItems = new HashSet<>();
-    private final Map<String, BlockDamageState> blockDamageStates = new HashMap<>();
     private final Set<Material> temporaryTorchBlocks = Set.of(
         Material.TORCH,
         Material.SOUL_TORCH,
@@ -76,7 +71,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
             }
         }, 40L, 40L);
 
-        getServer().getScheduler().runTaskTimer(this, this::updateHologramVisibility, 2L, 2L);
+        registerCustomRecipes();
     }
 
     @Override
@@ -141,8 +136,15 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
             return;
         }
 
-        event.setCancelled(true);
         ItemStack picked = event.getItem().getItemStack();
+        if (!hasSameItemInInventory(player, picked)) {
+            applyRulesToItem(picked);
+            getServer().getScheduler().runTaskLater(this, () -> unstackPlayerInventory(player), 1L);
+            return;
+        }
+
+        event.setCancelled(true);
+        player.playSound(player.getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.2f, 1.0f);
         int amount = Math.max(1, picked.getAmount());
         ItemStack base = picked.clone();
         base.setAmount(1);
@@ -184,11 +186,6 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         Material type = event.getClickedBlock().getType();
 
         if (!easyDroppedItems.contains(type)) {
-            ItemStack hand = player.getInventory().getItemInMainHand();
-            if (!hasProperTool(hand, type)) {
-                handleCustomBlockDamage(player, event.getClickedBlock());
-                event.setCancelled(true);
-            }
             return;
         }
 
@@ -197,126 +194,6 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         block.breakNaturally(player.getInventory().getItemInMainHand());
         player.playSound(block.getLocation(), breakSound, 1.0f, 1.0f);
         event.setCancelled(true);
-    }
-
-    private void handleCustomBlockDamage(Player player, Block block) {
-        String key = buildDamageKey(player.getUniqueId(), block);
-        BlockDamageState state = blockDamageStates.get(key);
-        if (state == null || state.remaining <= 0) {
-            state = createDamageState(player, block);
-            blockDamageStates.put(key, state);
-        }
-
-        state.remaining--;
-        updateHologram(block, state);
-        player.playSound(block.getLocation(), block.getBlockData().getSoundGroup().getHitSound(), 1.0f, 1.0f);
-
-        if (state.remaining <= 0) {
-            removeHologram(block.getWorld(), state);
-            blockDamageStates.remove(key);
-            block.breakNaturally(player.getInventory().getItemInMainHand());
-        }
-    }
-
-    private BlockDamageState createDamageState(Player player, Block block) {
-        ArmorStand hologram = block.getWorld().spawn(block.getLocation().add(0.5, 0.5, 0.5), ArmorStand.class, stand -> {
-            stand.setInvisible(true);
-            stand.setGravity(false);
-            stand.setMarker(true);
-            stand.setCustomNameVisible(true);
-        });
-        for (Player online : getServer().getOnlinePlayers()) {
-            online.hideEntity(this, hologram);
-        }
-        return new BlockDamageState(64, hologram.getUniqueId(), player.getUniqueId(), block.getLocation());
-    }
-
-    private void updateHologram(Block block, BlockDamageState state) {
-        Entity entity = block.getWorld().getEntity(state.hologramId);
-        if (entity instanceof ArmorStand stand) {
-            stand.setCustomName(colorForDamage(state.remaining) + state.remaining + "/64");
-        }
-    }
-
-    private void removeHologram(World world, BlockDamageState state) {
-        Entity entity = world.getEntity(state.hologramId);
-        if (entity != null) {
-            entity.remove();
-        }
-    }
-
-    private String buildDamageKey(UUID playerId, Block block) {
-        return playerId + ":" + block.getWorld().getName() + ":" + block.getX() + ":" + block.getY() + ":" + block.getZ();
-    }
-
-    private String colorForDamage(int remaining) {
-        if (remaining > 48) return "§a";
-        if (remaining > 32) return "§e";
-        if (remaining > 16) return "§6";
-        if (remaining > 8) return "§c";
-        return "§4";
-    }
-
-    private void updateHologramVisibility() {
-        for (Map.Entry<String, BlockDamageState> entry : blockDamageStates.entrySet()) {
-            BlockDamageState state = entry.getValue();
-            Player player = getServer().getPlayer(state.playerId);
-            if (player == null) {
-                continue;
-            }
-
-            Entity entity = state.blockLocation.getWorld().getEntity(state.hologramId);
-            if (entity == null) {
-                continue;
-            }
-
-            Block target = player.getTargetBlockExact(6);
-            boolean looking = target != null && target.getLocation().getBlock().equals(state.blockLocation.getBlock());
-            if (looking) {
-                player.showEntity(this, entity);
-            } else {
-                player.hideEntity(this, entity);
-            }
-        }
-    }
-
-    private boolean hasProperTool(ItemStack item, Material blockType) {
-        if (item == null || item.getType().isAir()) {
-            return false;
-        }
-
-        String name = item.getType().name();
-        if (name.endsWith("_SHOVEL")) {
-            return shovelBlocks.contains(blockType);
-        }
-        if (name.equals("WOODEN_PICKAXE")) {
-            return woodPickaxeBlocks.contains(blockType);
-        }
-        if (name.equals("STONE_PICKAXE")) {
-            return stonePickaxeBlocks.contains(blockType);
-        }
-        if (name.endsWith("_PICKAXE")) {
-            return buildGenericPickaxeBlocks().contains(blockType);
-        }
-        if (name.endsWith("_AXE")) {
-            return buildAxeBlocks().contains(blockType);
-        }
-
-        return false;
-    }
-
-    private static final class BlockDamageState {
-        private int remaining;
-        private final UUID hologramId;
-        private final UUID playerId;
-        private final org.bukkit.Location blockLocation;
-
-        private BlockDamageState(int remaining, UUID hologramId, UUID playerId, org.bukkit.Location blockLocation) {
-            this.remaining = remaining;
-            this.hologramId = hologramId;
-            this.playerId = playerId;
-            this.blockLocation = blockLocation;
-        }
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -354,6 +231,26 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
                 placed.getWorld().dropItemNaturally(placed.getLocation(), new ItemStack(Material.STICK, 1));
             }
         }, 20L * 30L);
+    }
+
+    private boolean hasSameItemInInventory(Player player, ItemStack picked) {
+        for (ItemStack content : player.getInventory().getContents()) {
+            if (content == null || content.getType().isAir()) {
+                continue;
+            }
+            if (content.isSimilar(picked)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void registerCustomRecipes() {
+        NamespacedKey key = new NamespacedKey(this, "oak_planks_from_sticks");
+        ShapedRecipe recipe = new ShapedRecipe(key, new ItemStack(Material.OAK_PLANKS, 1));
+        recipe.shape("SS", "SS");
+        recipe.setIngredient('S', Material.STICK);
+        getServer().addRecipe(recipe);
     }
 
     private void applyRulesToItem(ItemStack item) {
