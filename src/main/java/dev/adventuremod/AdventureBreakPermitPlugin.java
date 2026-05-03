@@ -309,7 +309,8 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
     }
 
     private void unstackPlayerInventory(Player player) {
-        ItemStack[] contents = player.getInventory().getContents();
+        var inventory = player.getInventory();
+        ItemStack[] contents = inventory.getContents();
         for (int slot = 0; slot < contents.length; slot++) {
             ItemStack stack = contents[slot];
             if (stack == null || stack.getType().isAir() || stack.getAmount() <= 1) {
@@ -317,15 +318,19 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
             }
 
             int amount = stack.getAmount();
-            stack.setAmount(1);
+            ItemStack base = stack.clone();
+            base.setAmount(1);
+            inventory.setItem(slot, base);
             int remaining = amount - 1;
 
             while (remaining > 0) {
-                ItemStack single = stack.clone();
+                ItemStack single = base.clone();
                 single.setAmount(1);
-                var leftovers = player.getInventory().addItem(single);
-                if (!leftovers.isEmpty()) {
+                int empty = inventory.firstEmpty();
+                if (empty == -1) {
                     player.getWorld().dropItemNaturally(player.getLocation(), single);
+                } else {
+                    inventory.setItem(empty, single);
                 }
                 remaining--;
             }
