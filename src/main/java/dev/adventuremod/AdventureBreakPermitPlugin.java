@@ -62,6 +62,13 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         saveDefaultConfig();
         reloadPluginConfig();
         getServer().getPluginManager().registerEvents(this, this);
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            for (Player player : getServer().getOnlinePlayers()) {
+                if (player.getGameMode() == GameMode.ADVENTURE) {
+                    unstackPlayerInventory(player);
+                }
+            }
+        }, 40L, 40L);
     }
 
     @Override
@@ -138,6 +145,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
                 player.getInventory().addItem(single);
             }
             event.getItem().remove();
+            getServer().getScheduler().runTaskLater(this, () -> unstackPlayerInventory(player), 1L);
             player.updateInventory();
             return;
         }
