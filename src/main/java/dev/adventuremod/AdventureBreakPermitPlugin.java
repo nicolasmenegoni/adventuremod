@@ -1,13 +1,16 @@
 package dev.adventuremod;
 
 import java.lang.reflect.Method;
+import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
@@ -135,19 +138,19 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         String name = type.name();
 
         if (type.isBlock()) {
-            invokeSet(meta, "setCanPlaceOn", canPlaceOnBlocks);
+            applyCanPlaceOn(meta, canPlaceOnBlocks);
         }
 
         if (name.endsWith("_SHOVEL")) {
-            invokeSet(meta, "setCanDestroy", shovelBlocks);
+            applyCanDestroy(meta, shovelBlocks);
         } else if (name.equals("WOODEN_PICKAXE")) {
-            invokeSet(meta, "setCanDestroy", woodPickaxeBlocks);
+            applyCanDestroy(meta, woodPickaxeBlocks);
         } else if (name.equals("STONE_PICKAXE")) {
-            invokeSet(meta, "setCanDestroy", stonePickaxeBlocks);
+            applyCanDestroy(meta, stonePickaxeBlocks);
         } else if (name.endsWith("_PICKAXE")) {
-            invokeSet(meta, "setCanDestroy", buildGenericPickaxeBlocks());
+            applyCanDestroy(meta, buildGenericPickaxeBlocks());
         } else if (name.endsWith("_AXE")) {
-            invokeSet(meta, "setCanDestroy", buildAxeBlocks());
+            applyCanDestroy(meta, buildAxeBlocks());
         }
 
         item.setItemMeta(meta);
@@ -181,12 +184,37 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         return blocks;
     }
 
-    private void invokeSet(ItemMeta meta, String methodName, Set<Material> materials) {
+    private void applyCanDestroy(ItemMeta meta, Set<Material> materials) {
+        if (tryInvoke(meta, "setCanDestroy", Set.class, materials)) {
+            return;
+        }
+
+        tryInvoke(meta, "setDestroyableKeys", Collection.class, toNamespacedKeys(materials));
+    }
+
+    private void applyCanPlaceOn(ItemMeta meta, Set<Material> materials) {
+        if (tryInvoke(meta, "setCanPlaceOn", Set.class, materials)) {
+            return;
+        }
+
+        tryInvoke(meta, "setPlaceableKeys", Collection.class, toNamespacedKeys(materials));
+    }
+
+    private Set<NamespacedKey> toNamespacedKeys(Set<Material> materials) {
+        Set<NamespacedKey> keys = new LinkedHashSet<>();
+        for (Material material : materials) {
+            keys.add(material.getKey());
+        }
+        return keys;
+    }
+
+    private boolean tryInvoke(ItemMeta meta, String methodName, Class<?> parameterType, Object value) {
         try {
-            Method method = meta.getClass().getMethod(methodName, Set.class);
-            method.invoke(meta, materials);
+            Method method = meta.getClass().getMethod(methodName, parameterType);
+            method.invoke(meta, value);
+            return true;
         } catch (ReflectiveOperationException ignored) {
-            // API sem suporte ao método.
+            return false;
         }
     }
 }
