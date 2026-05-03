@@ -11,23 +11,21 @@ import java.util.Set;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.block.Block;
-import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
-import org.bukkit.event.block.Action;
-import org.bukkit.event.player.PlayerInteractEvent;
+import org.bukkit.event.entity.EntityPickupItemEvent;
+import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
 public final class AdventureBreakPermitPlugin extends JavaPlugin implements Listener {
 
-    private final Set<Material> easyDroppedBlocks = new HashSet<>();
     private final Set<Material> canPlaceOnBlocks = new HashSet<>();
 
     private final Set<Material> shovelBlocks = EnumSet.of(
@@ -60,16 +58,14 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
     }
 
     private void reloadPluginConfig() {
-        easyDroppedBlocks.clear();
         canPlaceOnBlocks.clear();
 
         FileConfiguration config = getConfig();
-        loadMaterialList(config.getStringList("easy-dropped-itens"), easyDroppedBlocks, "easy-dropped-itens");
         loadMaterialList(config.getStringList("canplaceon-itens"), canPlaceOnBlocks, "canplaceon-itens");
 
         for (Player player : getServer().getOnlinePlayers()) {
             if (player.getGameMode() == GameMode.ADVENTURE) {
-                applyRulesToItem(player.getInventory().getItemInMainHand());
+                applyRulesToInventory(player);
             }
         }
     }
@@ -90,7 +86,7 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
     public void onJoin(PlayerJoinEvent event) {
         Player player = event.getPlayer();
         if (player.getGameMode() == GameMode.ADVENTURE) {
-            applyRulesToItem(player.getInventory().getItemInMainHand());
+            applyRulesToInventory(player);
         }
     }
 
@@ -104,88 +100,30 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onLeftClick(PlayerInteractEvent event) {
-        if (event.getAction() != Action.LEFT_CLICK_BLOCK) {
+    public void onInventoryClick(InventoryClickEvent event) {
+        if (!(event.getWhoClicked() instanceof Player player) || player.getGameMode() != GameMode.ADVENTURE) {
             return;
         }
 
-        Player player = event.getPlayer();
-        if (player.getGameMode() != GameMode.ADVENTURE) {
-            return;
-        }
-
-        Block block = event.getClickedBlock();
-        if (block == null) {
-            return;
-        }
-
-        if (easyDroppedBlocks.contains(block.getType())) {
-            block.breakNaturally(player.getInventory().getItemInMainHand());
-            event.setCancelled(true);
-            return;
-        }
-
-        ItemStack handItem = player.getInventory().getItemInMainHand();
-        if (canBreakWithTool(handItem, block.getType())) {
-            block.breakNaturally(handItem);
-            event.setCancelled(true);
-        }
+        applyRulesToInventory(player);
     }
 
     @EventHandler(ignoreCancelled = true)
-    public void onRightClick(PlayerInteractEvent event) {
-        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) {
+    public void onPickup(EntityPickupItemEvent event) {
+        if (!(event.getEntity() instanceof Player player) || player.getGameMode() != GameMode.ADVENTURE) {
             return;
         }
 
-        Player player = event.getPlayer();
-        if (player.getGameMode() != GameMode.ADVENTURE) {
-            return;
-        }
-
-        Block clicked = event.getClickedBlock();
-        if (clicked == null || !canPlaceOnBlocks.contains(clicked.getType())) {
-            return;
-        }
-
-        ItemStack handItem = player.getInventory().getItemInMainHand();
-        if (handItem == null || handItem.getType().isAir() || !handItem.getType().isBlock()) {
-            return;
-        }
-
-        Block target = clicked.getRelative(event.getBlockFace() == null ? BlockFace.UP : event.getBlockFace());
-        if (!target.getType().isAir()) {
-            return;
-        }
-
-        target.setType(handItem.getType(), true);
-        handItem.setAmount(handItem.getAmount() - 1);
-        event.setCancelled(true);
+        applyRulesToItem(event.getItem().getItemStack());
     }
 
-    private boolean canBreakWithTool(ItemStack handItem, Material blockType) {
-        if (handItem == null || handItem.getType().isAir()) {
-            return false;
+    private void applyRulesToInventory(Player player) {
+        PlayerInventory inventory = player.getInventory();
+        for (ItemStack content : inventory.getContents()) {
+            applyRulesToItem(content);
         }
-
-        String tool = handItem.getType().name();
-        if (tool.endsWith("_SHOVEL")) {
-            return shovelBlocks.contains(blockType);
-        }
-        if (tool.equals("WOODEN_PICKAXE")) {
-            return woodPickaxeBlocks.contains(blockType);
-        }
-        if (tool.equals("STONE_PICKAXE")) {
-            return stonePickaxeBlocks.contains(blockType);
-        }
-        if (tool.endsWith("_PICKAXE")) {
-            return buildGenericPickaxeBlocks().contains(blockType);
-        }
-        if (tool.endsWith("_AXE")) {
-            return buildAxeBlocks().contains(blockType);
-        }
-
-        return false;
+        applyRulesToItem(inventory.getItemInOffHand());
+        player.updateInventory();
     }
 
     private void applyRulesToItem(ItemStack item) {
