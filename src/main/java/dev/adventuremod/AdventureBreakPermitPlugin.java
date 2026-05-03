@@ -12,6 +12,7 @@ import org.bukkit.GameMode;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -121,7 +122,70 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
         if (easyDroppedBlocks.contains(block.getType())) {
             block.breakNaturally(player.getInventory().getItemInMainHand());
             event.setCancelled(true);
+            return;
         }
+
+        ItemStack handItem = player.getInventory().getItemInMainHand();
+        if (canBreakWithTool(handItem, block.getType())) {
+            block.breakNaturally(handItem);
+            event.setCancelled(true);
+        }
+    }
+
+    @EventHandler(ignoreCancelled = true)
+    public void onRightClick(PlayerInteractEvent event) {
+        if (event.getAction() != Action.RIGHT_CLICK_BLOCK) {
+            return;
+        }
+
+        Player player = event.getPlayer();
+        if (player.getGameMode() != GameMode.ADVENTURE) {
+            return;
+        }
+
+        Block clicked = event.getClickedBlock();
+        if (clicked == null || !canPlaceOnBlocks.contains(clicked.getType())) {
+            return;
+        }
+
+        ItemStack handItem = player.getInventory().getItemInMainHand();
+        if (handItem == null || handItem.getType().isAir() || !handItem.getType().isBlock()) {
+            return;
+        }
+
+        Block target = clicked.getRelative(event.getBlockFace() == null ? BlockFace.UP : event.getBlockFace());
+        if (!target.getType().isAir()) {
+            return;
+        }
+
+        target.setType(handItem.getType(), true);
+        handItem.setAmount(handItem.getAmount() - 1);
+        event.setCancelled(true);
+    }
+
+    private boolean canBreakWithTool(ItemStack handItem, Material blockType) {
+        if (handItem == null || handItem.getType().isAir()) {
+            return false;
+        }
+
+        String tool = handItem.getType().name();
+        if (tool.endsWith("_SHOVEL")) {
+            return shovelBlocks.contains(blockType);
+        }
+        if (tool.equals("WOODEN_PICKAXE")) {
+            return woodPickaxeBlocks.contains(blockType);
+        }
+        if (tool.equals("STONE_PICKAXE")) {
+            return stonePickaxeBlocks.contains(blockType);
+        }
+        if (tool.endsWith("_PICKAXE")) {
+            return buildGenericPickaxeBlocks().contains(blockType);
+        }
+        if (tool.endsWith("_AXE")) {
+            return buildAxeBlocks().contains(blockType);
+        }
+
+        return false;
     }
 
     private void applyRulesToItem(ItemStack item) {
