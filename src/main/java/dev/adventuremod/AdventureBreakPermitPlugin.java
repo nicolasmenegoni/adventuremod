@@ -1,16 +1,13 @@
 package dev.adventuremod;
 
-import java.lang.reflect.Method;
-import java.util.Collection;
 import java.util.EnumSet;
 import java.util.HashSet;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.bukkit.GameMode;
 import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -187,37 +184,11 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
     }
 
     private void applyCanDestroy(ItemMeta meta, Set<Material> materials) {
-        if (tryInvoke(meta, "setCanDestroy", Set.class, materials)) {
-            return;
-        }
-
-        tryInvoke(meta, "setDestroyableKeys", Collection.class, toNamespacedKeys(materials));
+        meta.setDestroyableKeys(materials.stream().map(Material::getKey).collect(Collectors.toSet()));
     }
 
     private void applyCanPlaceOn(ItemMeta meta, Set<Material> materials) {
-        if (tryInvoke(meta, "setCanPlaceOn", Set.class, materials)) {
-            return;
-        }
-
-        tryInvoke(meta, "setPlaceableKeys", Collection.class, toNamespacedKeys(materials));
-    }
-
-    private Set<NamespacedKey> toNamespacedKeys(Set<Material> materials) {
-        Set<NamespacedKey> keys = new LinkedHashSet<>();
-        for (Material material : materials) {
-            keys.add(material.getKey());
-        }
-        return keys;
-    }
-
-    private boolean tryInvoke(ItemMeta meta, String methodName, Class<?> parameterType, Object value) {
-        try {
-            Method method = meta.getClass().getMethod(methodName, parameterType);
-            method.invoke(meta, value);
-            return true;
-        } catch (ReflectiveOperationException ignored) {
-            return false;
-        }
+        meta.setPlaceableKeys(materials.stream().map(Material::getKey).collect(Collectors.toSet()));
     }
 
 }
