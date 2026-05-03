@@ -141,26 +141,19 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
             return;
         }
 
+        event.setCancelled(true);
         ItemStack picked = event.getItem().getItemStack();
-        if (picked.getAmount() > 1) {
-            event.setCancelled(true);
-            int amount = picked.getAmount();
-            ItemStack base = picked.clone();
-            base.setAmount(1);
-            for (int i = 0; i < amount; i++) {
-                ItemStack single = base.clone();
-                applyRulesToItem(single);
-                player.getInventory().addItem(single);
-            }
-            event.getItem().remove();
-            getServer().getScheduler().runTaskLater(this, () -> unstackPlayerInventory(player), 1L);
-            player.updateInventory();
-            return;
+        int amount = Math.max(1, picked.getAmount());
+        ItemStack base = picked.clone();
+        base.setAmount(1);
+        for (int i = 0; i < amount; i++) {
+            ItemStack single = base.clone();
+            applyRulesToItem(single);
+            player.getInventory().addItem(single);
         }
-
-        // Apply only when item is picked; avoid scanning entire inventory.
-        applyRulesToItem(picked);
+        event.getItem().remove();
         getServer().getScheduler().runTaskLater(this, () -> unstackPlayerInventory(player), 1L);
+        player.updateInventory();
     }
 
     @EventHandler(ignoreCancelled = true)
@@ -190,14 +183,12 @@ public final class AdventureBreakPermitPlugin extends JavaPlugin implements List
 
         Material type = event.getClickedBlock().getType();
 
-        ItemStack hand = player.getInventory().getItemInMainHand();
-        if (!hasProperTool(hand, type)) {
-            handleCustomBlockDamage(player, event.getClickedBlock());
-            event.setCancelled(true);
-            return;
-        }
-
         if (!easyDroppedItems.contains(type)) {
+            ItemStack hand = player.getInventory().getItemInMainHand();
+            if (!hasProperTool(hand, type)) {
+                handleCustomBlockDamage(player, event.getClickedBlock());
+                event.setCancelled(true);
+            }
             return;
         }
 
